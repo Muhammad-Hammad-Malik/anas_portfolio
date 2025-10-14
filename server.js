@@ -16,7 +16,14 @@ app.use(cors());
 app.use(express.json());
 
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+
+const upload = multer({
+  storage,
+  limits: {
+    fieldSize: 100 * 1024 * 1024, // 100 MB for editor content
+    fileSize: 20 * 1024 * 1024, // 20 MB for thumbnails
+  },
+});
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
