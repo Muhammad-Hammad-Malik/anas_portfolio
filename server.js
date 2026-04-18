@@ -6,8 +6,9 @@ const dotenv = require("dotenv");
 const cloudinary = require("cloudinary").v2;
 const Article = require("./models/Article");
 const Video = require("./models/Video");
+const Project = require("./models/Project");
 const nodemailer = require("nodemailer");
-const Graphic = require("./models/Graphic");
+const streamifier = require("streamifier");
 
 dotenv.config();
 const app = express();
@@ -16,7 +17,6 @@ app.use(cors());
 app.use(express.json());
 
 const storage = multer.memoryStorage();
-
 const upload = multer({
   storage,
   limits: {
@@ -36,41 +36,40 @@ mongoose
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.error(err));
 
-// Routes
+// ================= helper: Cloudinary stream upload =================
+const uploadBufferToCloudinary = (buffer, folder) =>
+  new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      }
+    );
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+
+// ================= ARTICLES =================
 app.post("/api/articles", upload.single("thumbnail"), async (req, res) => {
   try {
     const { name, description, date, content } = req.body;
     let thumbnailUrl = "";
     if (req.file) {
-      const uploadResult = await cloudinary.uploader.upload_stream(
-        { folder: "portfolio_articles" },
-        (error, result) => {
-          if (error) throw error;
-          thumbnailUrl = result.secure_url;
-          const newArticle = new Article({
-            name,
-            description,
-            date,
-            thumbnail: thumbnailUrl,
-            content,
-          });
-
-          newArticle.save().then((article) => {
-            res.json(article);
-          });
-        }
+      const uploaded = await uploadBufferToCloudinary(
+        req.file.buffer,
+        "portfolio_articles"
       );
-      uploadResult.end(req.file.buffer);
-    } else {
-      const newArticle = new Article({
-        name,
-        description,
-        date,
-        content,
-      });
-      await newArticle.save();
-      res.json(newArticle);
+      thumbnailUrl = uploaded.secure_url;
     }
+    const newArticle = new Article({
+      name,
+      description,
+      date,
+      thumbnail: thumbnailUrl,
+      content,
+    });
+    const saved = await newArticle.save();
+    res.json(saved);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
@@ -82,7 +81,7 @@ app.get("/api/articles", async (req, res) => {
     const articles = await Article.find(
       {},
       "name description thumbnail date"
-    ).sort({ date: -1 }); // sort newest first
+    ).sort({ date: -1 });
     res.json(articles);
   } catch (err) {
     res.status(500).json({ error: "Server error" });
@@ -93,30 +92,21 @@ app.delete("/api/articles/:name", async (req, res) => {
   try {
     const { name } = req.params;
     const deleted = await Article.findOneAndDelete({ name });
-
-    if (!deleted) {
-      return res.status(404).json({ error: "Article not found" });
-    }
-
+    if (!deleted) return res.status(404).json({ error: "Article not found" });
     res.json({ message: `Article '${name}' deleted successfully` });
   } catch (err) {
     res.status(500).json({ error: "Server error" });
   }
 });
 
-// GET article detail by name
 app.get("/api/articles/detail/:name", async (req, res) => {
   try {
     const { name } = req.params;
     const article = await Article.findOne(
       { name },
-      "name date content" // only return what we need
+      "name description date thumbnail content"
     );
-
-    if (!article) {
-      return res.status(404).json({ error: "Article not found" });
-    }
-
+    if (!article) return res.status(404).json({ error: "Article not found" });
     res.json(article);
   } catch (err) {
     console.error(err);
@@ -124,9 +114,96 @@ app.get("/api/articles/detail/:name", async (req, res) => {
   }
 });
 
-// ================= VIDEO PROJECTS =================
+app.get("/api/articles/latest", async (req, res) => {
+  try {
+    const articles = await Article.find({}, "name description thumbnail date")
+      .sort({ date: -1 })
+      .limit(3);
+    res.json(articles);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
-// GET all videos
+// ================= PROJECTS =================
+app.post("/api/projects", upload.single("thumbnail"), async (req, res) => {
+  try {
+    const { name, description, date, content } = req.body;
+    let thumbnailUrl = "";
+    if (req.file) {
+      const uploaded = await uploadBufferToCloudinary(
+        req.file.buffer,
+        "portfolio_projects"
+      );
+      thumbnailUrl = uploaded.secure_url;
+    }
+    const newProject = new Project({
+      name,
+      description,
+      date,
+      thumbnail: thumbnailUrl,
+      content,
+    });
+    const saved = await newProject.save();
+    res.json(saved);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/api/projects", async (req, res) => {
+  try {
+    const projects = await Project.find(
+      {},
+      "name description thumbnail date"
+    ).sort({ date: -1 });
+    res.json(projects);
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/api/projects/latest", async (req, res) => {
+  try {
+    const projects = await Project.find({}, "name description thumbnail date")
+      .sort({ date: -1 })
+      .limit(3);
+    res.json(projects);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/api/projects/detail/:name", async (req, res) => {
+  try {
+    const { name } = req.params;
+    const project = await Project.findOne(
+      { name },
+      "name description date thumbnail content"
+    );
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    res.json(project);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.delete("/api/projects/:name", async (req, res) => {
+  try {
+    const { name } = req.params;
+    const deleted = await Project.findOneAndDelete({ name });
+    if (!deleted) return res.status(404).json({ error: "Project not found" });
+    res.json({ message: `Project '${name}' deleted successfully` });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ================= VIDEOS =================
 app.get("/api/videos", async (req, res) => {
   try {
     const videos = await Video.find().sort({ date: -1 });
@@ -136,103 +213,50 @@ app.get("/api/videos", async (req, res) => {
   }
 });
 
-// CREATE new video
 app.post("/api/videos", async (req, res) => {
   try {
     const { title, description, date, youtubeUrl } = req.body;
-
     const newVideo = new Video({ title, description, date, youtubeUrl });
     await newVideo.save();
-
     res.json(newVideo);
   } catch (err) {
     res.status(500).json({ error: "Server error" });
   }
 });
 
-// DELETE video by ID
 app.delete("/api/videos/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const deleted = await Video.findByIdAndDelete(id);
-
     if (!deleted) return res.status(404).json({ error: "Video not found" });
-
     res.json({ message: "Video deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: "Server error" });
   }
 });
 
-// ================= GRAPHIC DESIGN =================
-
-// GET all graphics
-app.get("/api/graphics", async (req, res) => {
+app.get("/api/videos/latest", async (req, res) => {
   try {
-    const graphics = await Graphic.find();
-    res.json(graphics);
-  } catch (err) {
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-app.post("/api/graphics", upload.single("image"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
-
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: "graphics" },
-      async (error, result) => {
-        if (error) {
-          console.error(error);
-          return res.status(500).json({ error: "Upload failed" });
-        }
-
-        const newGraphic = new Graphic({ imageUrl: result.secure_url });
-        const saved = await newGraphic.save();
-        res.json(saved);
-      }
-    );
-
-    // send buffer directly
-    const streamifier = require("streamifier");
-    streamifier.createReadStream(req.file.buffer).pipe(stream);
+    const videos = await Video.find().sort({ date: -1 }).limit(3);
+    res.json(videos);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-// DELETE graphic by ID
-app.delete("/api/graphics/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const deleted = await Graphic.findByIdAndDelete(id);
-
-    if (!deleted) return res.status(404).json({ error: "Graphic not found" });
-
-    res.json({ message: "Graphic deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
+// ================= CONTACT EMAIL =================
 app.post("/api/send-email", async (req, res) => {
   const { name, email, subject, message } = req.body;
-
   if (!name || !email || !subject || !message) {
     return res.status(400).json({ error: "All fields are required" });
   }
-
   try {
-    // configure mail transporter (example: Gmail)
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
-        user: process.env.EMAIL_USER, // your email
-        pass: process.env.EMAIL_PASS, // app password (not regular password)
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
       },
     });
 
@@ -250,7 +274,6 @@ app.post("/api/send-email", async (req, res) => {
     };
 
     await transporter.sendMail(mailOptions);
-
     res.json({ success: true, message: "Email sent successfully" });
   } catch (err) {
     console.error("Error sending email:", err);
@@ -258,48 +281,18 @@ app.post("/api/send-email", async (req, res) => {
   }
 });
 
-// GET only 3 latest videos
-app.get("/api/videos/latest", async (req, res) => {
-  try {
-    const videos = await Video.find().sort({ date: -1 }).limit(3);
-    res.json(videos);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// GET only 3 latest articles (basic info)
-app.get("/api/articles/latest", async (req, res) => {
-  try {
-    const articles = await Article.find({}, "name description thumbnail date")
-      .sort({ date: -1 })
-      .limit(3);
-    res.json(articles);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
+// ================= AUTH =================
 app.post("/api/login", (req, res) => {
   const { password } = req.body;
-
-  // Validate input
   if (!password) {
     return res
       .status(400)
       .json({ success: false, message: "Password is required" });
   }
-
-  // Compare with password stored in .env
   if (password === process.env.ADMIN_PASSWORD) {
     return res.json({ success: true, message: "Login successful" });
-  } else {
-    return res
-      .status(401)
-      .json({ success: false, message: "Invalid password" });
   }
+  return res.status(401).json({ success: false, message: "Invalid password" });
 });
 
 const PORT = process.env.PORT || 5000;
