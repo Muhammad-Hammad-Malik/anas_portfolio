@@ -44,10 +44,24 @@ const uploadBufferToCloudinary = (buffer, folder) =>
       (error, result) => {
         if (error) return reject(error);
         resolve(result);
-      }
+      },
     );
     streamifier.createReadStream(buffer).pipe(stream);
   });
+
+app.post("/api/upload/inline", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file" });
+    const uploaded = await uploadBufferToCloudinary(
+      req.file.buffer,
+      "portfolio_inline",
+    );
+    res.json({ location: uploaded.secure_url });
+  } catch (err) {
+    console.error("Inline upload failed:", err);
+    res.status(500).json({ error: "Upload failed" });
+  }
+});
 
 // ================= ARTICLES =================
 app.post("/api/articles", upload.single("thumbnail"), async (req, res) => {
@@ -57,7 +71,7 @@ app.post("/api/articles", upload.single("thumbnail"), async (req, res) => {
     if (req.file) {
       const uploaded = await uploadBufferToCloudinary(
         req.file.buffer,
-        "portfolio_articles"
+        "portfolio_articles",
       );
       thumbnailUrl = uploaded.secure_url;
     }
@@ -80,7 +94,7 @@ app.get("/api/articles", async (req, res) => {
   try {
     const articles = await Article.find(
       {},
-      "name description thumbnail date"
+      "name description thumbnail date",
     ).sort({ date: -1 });
     res.json(articles);
   } catch (err) {
@@ -104,7 +118,7 @@ app.get("/api/articles/detail/:name", async (req, res) => {
     const { name } = req.params;
     const article = await Article.findOne(
       { name },
-      "name description date thumbnail content"
+      "name description date thumbnail content",
     );
     if (!article) return res.status(404).json({ error: "Article not found" });
     res.json(article);
@@ -134,7 +148,7 @@ app.post("/api/projects", upload.single("thumbnail"), async (req, res) => {
     if (req.file) {
       const uploaded = await uploadBufferToCloudinary(
         req.file.buffer,
-        "portfolio_projects"
+        "portfolio_projects",
       );
       thumbnailUrl = uploaded.secure_url;
     }
@@ -157,7 +171,7 @@ app.get("/api/projects", async (req, res) => {
   try {
     const projects = await Project.find(
       {},
-      "name description thumbnail date"
+      "name description thumbnail date",
     ).sort({ date: -1 });
     res.json(projects);
   } catch (err) {
@@ -182,7 +196,7 @@ app.get("/api/projects/detail/:name", async (req, res) => {
     const { name } = req.params;
     const project = await Project.findOne(
       { name },
-      "name description date thumbnail content"
+      "name description date thumbnail content",
     );
     if (!project) return res.status(404).json({ error: "Project not found" });
     res.json(project);
