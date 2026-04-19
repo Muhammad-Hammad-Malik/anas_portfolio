@@ -7,6 +7,8 @@ const cloudinary = require("cloudinary").v2;
 const Article = require("./models/Article");
 const Video = require("./models/Video");
 const Project = require("./models/Project");
+const InstagramPost = require("./models/InstagramPost");
+const GalleryImage = require("./models/GalleryImage");
 const nodemailer = require("nodemailer");
 const streamifier = require("streamifier");
 
@@ -253,6 +255,91 @@ app.get("/api/videos/latest", async (req, res) => {
   try {
     const videos = await Video.find().sort({ date: -1 }).limit(3);
     res.json(videos);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ================= INSTAGRAM POSTS =================
+app.get("/api/instagram-posts", async (req, res) => {
+  try {
+    const posts = await InstagramPost.find().sort({ createdAt: -1 });
+    res.json(posts);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/api/instagram-posts", async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url || typeof url !== "string" || !url.trim()) {
+      return res.status(400).json({ error: "URL is required" });
+    }
+    const newPost = new InstagramPost({ url: url.trim() });
+    const saved = await newPost.save();
+    res.json(saved);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.delete("/api/instagram-posts/:id", async (req, res) => {
+  try {
+    const deleted = await InstagramPost.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ error: "Post not found" });
+    res.json({ message: "Post deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ================= GALLERY =================
+const GALLERY_MAX = 12;
+
+app.get("/api/gallery", async (req, res) => {
+  try {
+    const images = await GalleryImage.find()
+      .sort({ createdAt: 1 })
+      .limit(GALLERY_MAX);
+    res.json(images);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/api/gallery", upload.single("image"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file" });
+    const count = await GalleryImage.countDocuments();
+    if (count >= GALLERY_MAX) {
+      return res.status(400).json({
+        error: `Gallery full (max ${GALLERY_MAX}). Delete one to add another.`,
+      });
+    }
+    const uploaded = await uploadBufferToCloudinary(
+      req.file.buffer,
+      "portfolio_gallery",
+    );
+    const newImage = new GalleryImage({ url: uploaded.secure_url });
+    const saved = await newImage.save();
+    res.json(saved);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.delete("/api/gallery/:id", async (req, res) => {
+  try {
+    const deleted = await GalleryImage.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ error: "Image not found" });
+    res.json({ message: "Image deleted successfully" });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
