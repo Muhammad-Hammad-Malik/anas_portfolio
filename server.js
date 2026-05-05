@@ -115,6 +115,28 @@ app.delete("/api/articles/:name", async (req, res) => {
   }
 });
 
+app.put("/api/articles/:name", upload.single("thumbnail"), async (req, res) => {
+  try {
+    const { name } = req.params;
+    const { name: newName, description, date, content } = req.body;
+    const update = { description, date, content };
+    if (newName) update.name = newName;
+    if (req.file) {
+      const uploaded = await uploadBufferToCloudinary(
+        req.file.buffer,
+        "portfolio_articles",
+      );
+      update.thumbnail = uploaded.secure_url;
+    }
+    const updated = await Article.findOneAndUpdate({ name }, update, { new: true });
+    if (!updated) return res.status(404).json({ error: "Article not found" });
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.get("/api/articles/detail/:name", async (req, res) => {
   try {
     const { name } = req.params;
@@ -219,6 +241,28 @@ app.delete("/api/projects/:name", async (req, res) => {
   }
 });
 
+app.put("/api/projects/:name", upload.single("thumbnail"), async (req, res) => {
+  try {
+    const { name } = req.params;
+    const { name: newName, description, date, content } = req.body;
+    const update = { description, date, content };
+    if (newName) update.name = newName;
+    if (req.file) {
+      const uploaded = await uploadBufferToCloudinary(
+        req.file.buffer,
+        "portfolio_projects",
+      );
+      update.thumbnail = uploaded.secure_url;
+    }
+    const updated = await Project.findOneAndUpdate({ name }, update, { new: true });
+    if (!updated) return res.status(404).json({ error: "Project not found" });
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // ================= VIDEOS =================
 app.get("/api/videos", async (req, res) => {
   try {
@@ -247,6 +291,23 @@ app.delete("/api/videos/:id", async (req, res) => {
     if (!deleted) return res.status(404).json({ error: "Video not found" });
     res.json({ message: "Video deleted successfully" });
   } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.put("/api/videos/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, date, youtubeUrl } = req.body;
+    const updated = await Video.findByIdAndUpdate(
+      id,
+      { title, description, date, youtubeUrl },
+      { new: true },
+    );
+    if (!updated) return res.status(404).json({ error: "Video not found" });
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });
